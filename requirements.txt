@@ -1,9 +1,9 @@
-requests
-langgraph
-langchain-google-genai
-pydantic
-python-dotenv
 fastapi
 uvicorn
-pymongo 
-
+python-dotenv
+pydantic
+requests
+pymongo
+bson
+langgraph
+langchain-google-genai
