@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import logging
 from datetime import date
 from typing import TypedDict, Optional
 from fastapi import FastAPI, HTTPException
@@ -12,28 +13,50 @@ from langgraph.graph import StateGraph, START, END
 from langchain_google_genai import ChatGoogleGenerativeAI
 import uvicorn
 
-# Load environment variables directly from system environment
-MONGODB_URI = os.getenv("MONGODB_URI")
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-MALE_BN_API_URL = os.getenv("MALE_BN_API_URL")
-FEMALE_BN_API_URL = os.getenv("FEMALE_BN_API_URL")
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Validate required environment variables
-if not MONGODB_URI:
-    raise EnvironmentError("Missing MONGODB_URI in environment")
-if not GOOGLE_API_KEY:
-    raise EnvironmentError("Missing GOOGLE_API_KEY in environment")
-if not MALE_BN_API_URL or not FEMALE_BN_API_URL:
-    raise EnvironmentError("Missing gender-specific BN API URLs in environment")
+# Load and validate environment variables
+def get_required_env(var_name: str) -> str:
+    value = os.getenv(var_name)
+    if not value:
+        logger.error(f"Missing required environment variable: {var_name}")
+        raise EnvironmentError(f"Missing {var_name} in environment")
+    logger.info(f"Loaded {var_name}")
+    return value
+
+# Load environment variables with validation
+try:
+    logger.info("Loading environment variables...")
+    MONGODB_URI = get_required_env("MONGODB_URI")
+    GOOGLE_API_KEY = get_required_env("GOOGLE_API_KEY")
+    MALE_BN_API_URL = get_required_env("MALE_BN_API_URL")
+    FEMALE_BN_API_URL = get_required_env("FEMALE_BN_API_URL")
+except EnvironmentError as e:
+    logger.error(f"Environment configuration error: {str(e)}")
+    raise
 
 # Initialize MongoDB client
-tmp_client = MongoClient(MONGODB_URI)
-db = tmp_client.get_default_database()
-patients_col = db["patients"]
-metrics_col = db["healthmetrics"]
+try:
+    logger.info("Initializing MongoDB connection...")
+    tmp_client = MongoClient(MONGODB_URI)
+    db = tmp_client.get_default_database()
+    patients_col = db["patients"]
+    metrics_col = db["healthmetrics"]
+    logger.info("MongoDB connection established")
+except Exception as e:
+    logger.error(f"Failed to connect to MongoDB: {str(e)}")
+    raise
 
 # Initialize LLM
-llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", api_key=GOOGLE_API_KEY)
+try:
+    logger.info("Initializing LLM...")
+    llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", api_key=GOOGLE_API_KEY)
+    logger.info("LLM initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize LLM: {str(e)}")
+    raise
 
 # Pydantic models
 class Recommendations(BaseModel):
@@ -66,10 +89,13 @@ def get_risk_probabilities(patient_data: dict) -> dict:
     else:
         raise ValueError("Invalid gender in patient data; must be 'M' or 'F'")
 
-    response = requests.post(api_url, json=payload)
-    if response.status_code != 200:
-        raise HTTPException(status_code=502, detail=f"BN service error: {response.status_code}")
-    return response.json()
+    try:
+        response = requests.post(api_url, json=payload)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        logger.error(f"BN API request failed: {str(e)}")
+        raise HTTPException(status_code=502, detail=f"BN service error: {str(e)}")
 
 def classify_recommendation(text: str) -> str:
     t = text.lower()
@@ -122,7 +148,7 @@ def generate_recommendations(state: State) -> dict:
             "You MUST provide nutrition targets in 'nutrition_targets', which must be a dictionary with target values for relevant metrics, e.g., 'target_BMI', 'target_glucose', etc.\n"
             "Set 'doctor_recommendations' to null.\n"
             "**Critical Instruction:** Do NOT omit 'diet_plan', 'exercise_plan', or 'nutrition_targets'. These fields are required and must be populated with appropriate values based on the patient data.\n"
-            "Here's an example of the expected JSON output:\n"
+            "Here’s an example of the expected JSON output:\n"
             "{\n"
             "  \"patient_recommendations\": [\"Increase water intake\", \"Reduce sugar consumption\"],\n"
             "  \"diet_plan\": {\"description\": \"A balanced diet with Egyptian staples like ful medames and koshari\", \"calories\": 2000, \"meals\": [\"Ful medames with bread\", \"Grilled chicken with rice\"]},\n"
@@ -133,10 +159,10 @@ def generate_recommendations(state: State) -> dict:
         )
     elif sent_for == 1:
         instruction = (
-            "Provide up to three medical action recommendations for a cardiologist in 'doctor_recommendations'. "
+       "Provide up to three medical action recommendations for a cardiologist in 'doctor_recommendations'. "
             "Notify about comorbid conditions (e.g., prediabetes) and caution against medications that may worsen those conditions.\n"
             "Set 'patient_recommendations', 'diet_plan', 'exercise_plan', 'nutrition_targets' to null."
-        )
+    )
     elif sent_for == 2:
         instruction = (
             "Provide up to three medical action recommendations for an endocrinologist in 'doctor_recommendations'. "
@@ -156,29 +182,22 @@ def generate_recommendations(state: State) -> dict:
     )
     response = llm.invoke(prompt)
     try:
-        json_match = re.search(r'\{.*\}', response.content, re.DOTALL)
-        if json_match:
-            json_str = json_match.group(0)
-        else:
-            json_str = response.content
-        recs_dict = json.loads(json_str)
-        recs = Recommendations(**recs_dict)
-    except json.JSONDecodeError:
-        raise ValueError("Failed to parse JSON from the language model response.")
+        response = llm.invoke(prompt)
+        json_str = re.search(r'\{.*\}', response.content, re.DOTALL).group(0)
+        recs = Recommendations(**json.loads(json_str))
+        
+        if sent_for == 0 and (not recs.diet_plan or not recs.exercise_plan):
+            raise ValueError("Missing required recommendation fields")
+            
+        return {'recommendations': recs}
     except Exception as e:
-        raise ValueError(f"Error parsing recommendations: {str(e)}")
-
-    if sent_for == 0:
-        if not recs.diet_plan or not recs.exercise_plan or not recs.nutrition_targets:
-            raise ValueError("Diet plan, exercise plan, or nutrition targets are missing in the recommendations.")
-
-    return {'recommendations': recs}
+        logger.error(f"Recommendation generation failed: {str(e)}")
+        raise
 
 def evaluate_recommendations(state: State) -> dict:
     if state['sent_for'] != 0:
         return {'selected_patient_recommendations': []}
-    if state['recommendations'] is None:
-        raise ValueError("Recommendations are None for sent_for == 0")
+    
     original = state['risk_probabilities']
     selected = []
     for rec in state['recommendations'].patient_recommendations or []:
@@ -192,31 +211,34 @@ def evaluate_recommendations(state: State) -> dict:
 
 def output_results(state: State) -> dict:
     probs = state['risk_probabilities']['Health Risk Probabilities']
-    sent_for = state['sent_for']
     result = {
         'diabetes_probability': probs['Diabetes'],
         'cvd_probability': probs['Heart Disease']
     }
-    if sent_for == 0:
-        result['patient_recommendations'] = state['selected_patient_recommendations'][:3]
-        result['diet_plan'] = state['recommendations'].diet_plan
-        result['exercise_plan'] = state['recommendations'].exercise_plan
-        result['nutrition_targets'] = state['recommendations'].nutrition_targets
-    elif sent_for == 1:
+    
+    if state['sent_for'] == 0:
+        result.update({
+            'patient_recommendations': state['selected_patient_recommendations'][:3],
+            'diet_plan': state['recommendations'].diet_plan,
+            'exercise_plan': state['recommendations'].exercise_plan,
+            'nutrition_targets': state['recommendations'].nutrition_targets
+        })
+    else:
         result['doctor_recommendations'] = state['recommendations'].doctor_recommendations[:3]
-    elif sent_for == 2:
-        result['doctor_recommendations'] = state['recommendations'].doctor_recommendations[:3]
+    
     return result
 
 # Build and compile state graph
 graph_builder = StateGraph(State)
 for node in ['risk_assessment', 'generate_recommendations', 'evaluate_recommendations', 'output_results']:
     graph_builder.add_node(node, globals()[node])
+
 graph_builder.add_edge(START, 'risk_assessment')
 graph_builder.add_edge('risk_assessment', 'generate_recommendations')
 graph_builder.add_edge('generate_recommendations', 'evaluate_recommendations')
 graph_builder.add_edge('evaluate_recommendations', 'output_results')
 graph_builder.add_edge('output_results', END)
+
 graph = graph_builder.compile()
 
 # FastAPI app
@@ -233,11 +255,7 @@ async def get_recommendations(patient_id: str, sent_for: Optional[int] = 0):
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
-    metrics = list(
-        metrics_col.find({"patientId": patient_id})
-                   .sort([('createdAt', -1)])
-                   .limit(1)
-    )
+    metrics = list(metrics_col.find({"patientId": patient_id}).sort([('createdAt', -1)]).limit(1))
     if metrics:
         patient.update(metrics[0])
 
