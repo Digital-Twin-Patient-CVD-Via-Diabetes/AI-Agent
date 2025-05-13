@@ -4,6 +4,5 @@ python-dotenv
 pydantic
 requests
 pymongo
-bson
 langgraph
 langchain-google-genai
