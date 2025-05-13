@@ -4,7 +4,6 @@ import re
 from datetime import date
 from typing import TypedDict, Optional
 from fastapi import FastAPI, HTTPException
-#from dotenv import load_dotenv
 from pydantic import BaseModel
 from bson import ObjectId, SON
 from pymongo import MongoClient
@@ -13,20 +12,18 @@ from langgraph.graph import StateGraph, START, END
 from langchain_google_genai import ChatGoogleGenerativeAI
 import uvicorn
 
-# Load environment variables
-#dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
-#load_dotenv(dotenv_path)
-
+# Load environment variables directly from system environment
 MONGODB_URI = os.getenv("MONGODB_URI")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-MALE_API_URL = os.getenv("MALE_BN_API_URL")
-FEMALE_API_URL = os.getenv("FEMALE_BN_API_URL")
+MALE_BN_API_URL = os.getenv("MALE_BN_API_URL")
+FEMALE_BN_API_URL = os.getenv("FEMALE_BN_API_URL")
 
+# Validate required environment variables
 if not MONGODB_URI:
     raise EnvironmentError("Missing MONGODB_URI in environment")
 if not GOOGLE_API_KEY:
     raise EnvironmentError("Missing GOOGLE_API_KEY in environment")
-if not MALE_API_URL or not FEMALE_API_URL:
+if not MALE_BN_API_URL or not FEMALE_BN_API_URL:
     raise EnvironmentError("Missing gender-specific BN API URLs in environment")
 
 # Initialize MongoDB client
@@ -61,10 +58,11 @@ def get_risk_probabilities(patient_data: dict) -> dict:
     payload = patient_data.copy()
     payload.pop('gender', None)
     gender = patient_data.get('gender')
+    
     if gender == 'M':
-        api_url = MALE_API_URL
+        api_url = MALE_BN_API_URL
     elif gender == 'F':
-        api_url = FEMALE_API_URL
+        api_url = FEMALE_BN_API_URL
     else:
         raise ValueError("Invalid gender in patient data; must be 'M' or 'F'")
 
@@ -124,7 +122,7 @@ def generate_recommendations(state: State) -> dict:
             "You MUST provide nutrition targets in 'nutrition_targets', which must be a dictionary with target values for relevant metrics, e.g., 'target_BMI', 'target_glucose', etc.\n"
             "Set 'doctor_recommendations' to null.\n"
             "**Critical Instruction:** Do NOT omit 'diet_plan', 'exercise_plan', or 'nutrition_targets'. These fields are required and must be populated with appropriate values based on the patient data.\n"
-            "Here’s an example of the expected JSON output:\n"
+            "Here's an example of the expected JSON output:\n"
             "{\n"
             "  \"patient_recommendations\": [\"Increase water intake\", \"Reduce sugar consumption\"],\n"
             "  \"diet_plan\": {\"description\": \"A balanced diet with Egyptian staples like ful medames and koshari\", \"calories\": 2000, \"meals\": [\"Ful medames with bread\", \"Grilled chicken with rice\"]},\n"
@@ -158,7 +156,6 @@ def generate_recommendations(state: State) -> dict:
     )
     response = llm.invoke(prompt)
     try:
-        # Extract JSON if embedded in text
         json_match = re.search(r'\{.*\}', response.content, re.DOTALL)
         if json_match:
             json_str = json_match.group(0)
@@ -171,7 +168,6 @@ def generate_recommendations(state: State) -> dict:
     except Exception as e:
         raise ValueError(f"Error parsing recommendations: {str(e)}")
 
-    # Ensure required fields are not null when sent_for == 0
     if sent_for == 0:
         if not recs.diet_plan or not recs.exercise_plan or not recs.nutrition_targets:
             raise ValueError("Diet plan, exercise plan, or nutrition targets are missing in the recommendations.")
@@ -232,13 +228,11 @@ async def get_recommendations(patient_id: str, sent_for: Optional[int] = 0):
         oid = ObjectId(patient_id)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid patient ID format")
-    print(oid)
 
     patient = patients_col.find_one({"_id": oid})
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
-    # Fetch latest health metrics
     metrics = list(
         metrics_col.find({"patientId": patient_id})
                    .sort([('createdAt', -1)])
@@ -247,7 +241,6 @@ async def get_recommendations(patient_id: str, sent_for: Optional[int] = 0):
     if metrics:
         patient.update(metrics[0])
 
-    # Prepare data for model
     patient_data = {
         "Age": (date.today() - patient['birthDate'].date()).days // 365,
         "Blood_Pressure": patient.get('bloodPressure'),
@@ -263,8 +256,7 @@ async def get_recommendations(patient_id: str, sent_for: Optional[int] = 0):
         "gender": 'M' if patient['gender'].lower().startswith('m') else 'F'
     }
 
-    # Run workflow
-    initial_state = {'patient_data': patient_data, 'sent_for': sent_for } 
+    initial_state = {'patient_data': patient_data, 'sent_for': sent_for} 
     result = await graph.ainvoke(initial_state)
     return result
 
