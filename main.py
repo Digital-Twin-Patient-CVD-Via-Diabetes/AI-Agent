@@ -4,7 +4,7 @@ import re
 from datetime import date
 from typing import TypedDict, Optional
 from fastapi import FastAPI, HTTPException
-from dotenv import load_dotenv
+#from dotenv import load_dotenv
 from pydantic import BaseModel
 from bson import ObjectId, SON
 from pymongo import MongoClient
@@ -14,8 +14,8 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 import uvicorn
 
 # Load environment variables
-dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
-load_dotenv(dotenv_path)
+#dotenv_path = os.path.join(os.path.dirname(__file__), ".env")
+#load_dotenv(dotenv_path)
 
 MONGODB_URI = os.getenv("MONGODB_URI")
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
