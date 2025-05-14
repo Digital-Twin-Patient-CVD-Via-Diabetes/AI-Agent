@@ -3,7 +3,7 @@ import json
 import re
 import logging
 from datetime import date
-from typing import TypedDict, Optional
+from typing import TypedDict, Optional, List
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from bson import ObjectId, SON
@@ -44,6 +44,7 @@ try:
     db = tmp_client.get_default_database()
     patients_col = db["patients"]
     metrics_col = db["healthmetrics"]
+    medications_col = db["medications"]  # New collection for medications
     logger.info("MongoDB connection established")
 except Exception as e:
     logger.error(f"Failed to connect to MongoDB: {str(e)}")
@@ -59,19 +60,25 @@ except Exception as e:
     raise
 
 # Pydantic models
+class Medication(BaseModel):
+    medicationName: str
+    dosage: str
+    frequency: Optional[str] = None
+
 class Recommendations(BaseModel):
-    patient_recommendations: Optional[list[str]] = None
+    patient_recommendations: Optional[List[str]] = None
     diet_plan: Optional[dict] = None
     exercise_plan: Optional[dict] = None
     nutrition_targets: Optional[dict] = None
-    doctor_recommendations: Optional[list[str]] = None
+    doctor_recommendations: Optional[List[str]] = None
 
 class State(TypedDict):
     patient_data: dict
     sent_for: int
     risk_probabilities: dict
     recommendations: Recommendations
-    selected_patient_recommendations: list[str]
+    selected_patient_recommendations: List[str]
+    current_medications: List[Medication]
 
 # Helper functions
 def parse_probability(prob_str: str) -> float:
@@ -130,6 +137,20 @@ def is_effective(orig: dict, new: dict) -> bool:
     return ((n_d < o_d - 0.05 and n_c <= o_c + 0.01) or
             (n_c < o_c - 0.05 and n_d <= o_d + 0.01))
 
+def get_patient_medications(patient_id: str) -> List[Medication]:
+    try:
+        medications = list(medications_col.find({"patientId": patient_id}))
+        return [
+            Medication(
+                medicationName=med.get('medicationName'),
+                dosage=med.get('dosage'),
+                frequency=med.get('frequency')
+            ) for med in medications
+        ]
+    except Exception as e:
+        logger.error(f"Failed to fetch medications: {str(e)}")
+        return []
+
 # Graph nodes
 def risk_assessment(state: State) -> dict:
     probs = get_risk_probabilities(state['patient_data'])
@@ -139,6 +160,7 @@ def generate_recommendations(state: State) -> dict:
     pd = state['patient_data']
     probs = state['risk_probabilities']['Health Risk Probabilities']
     sent_for = state['sent_for']
+    medications = state.get('current_medications', [])
 
     if sent_for == 0:
         instruction = (
@@ -147,16 +169,16 @@ def generate_recommendations(state: State) -> dict:
             "You MUST provide an exercise plan in 'exercise_plan', which must be a dictionary with 'type' (string, e.g., 'aerobic'), 'duration' (integer, minutes per session), 'frequency' (integer, sessions per week).\n"
             "You MUST provide nutrition targets in 'nutrition_targets', which must be a dictionary with target values for relevant metrics, e.g., 'target_BMI', 'target_glucose', etc.\n"
             "Set 'doctor_recommendations' to null.\n"
-            "**Critical Instruction:** Do NOT omit 'diet_plan', 'exercise_plan', or 'nutrition_targets'. These fields are required and must be populated with appropriate values based on the patient data.\n"
+            "**Critical Instruction:** Consider the patient's current medications: {medications}. Ensure no conflicts with these medications.\n"
             "Here's an example of the expected JSON output:\n"
-            "{\n"
+            "{{\n"
             "  \"patient_recommendations\": [\"Increase water intake\", \"Reduce sugar consumption\"],\n"
-            "  \"diet_plan\": {\"description\": \"A balanced diet with Egyptian staples like ful medames and koshari\", \"calories\": 2000, \"meals\": [\"Ful medames with bread\", \"Grilled chicken with rice\"]},\n"
-            "  \"exercise_plan\": {\"type\": \"aerobic\", \"duration\": 30, \"frequency\": 5},\n"
-            "  \"nutrition_targets\": {\"target_BMI\": 25.0, \"target_glucose\": 100},\n"
+            "  \"diet_plan\": {{\"description\": \"A balanced diet with Egyptian staples like ful medames and koshari\", \"calories\": 2000, \"meals\": [\"Ful medames with bread\", \"Grilled chicken with rice\"]}},\n"
+            "  \"exercise_plan\": {{\"type\": \"aerobic\", \"duration\": 30, \"frequency\": 5}},\n"
+            "  \"nutrition_targets\": {{\"target_BMI\": 25.0, \"target_glucose\": 100}},\n"
             "  \"doctor_recommendations\": null\n"
-            "}"
-        )
+            "}}"
+        ).format(medications=", ".join([f"{m.medicationName} ({m.dosage})" for m in medications]))
     elif sent_for == 1:
         instruction = (
             "Provide a comprehensive, personalized cardiology recommendation in 'doctor_recommendations' based on the patient's data. "
@@ -164,7 +186,7 @@ def generate_recommendations(state: State) -> dict:
            
             "1. Key Risk Factors: (no mention for age ok )List the patient's specific cardiovascular risk factors\n"
             "2. Recommended Diagnostic Tests: Specify necessary labs/tests with target ranges\n"
-            "3. Medication Considerations: Suggest potential medications with cautions\n"
+            "3. Medication Considerations: Suggest potential medications with cautions, considering current medications: {medications}\n"
             "4. Monitoring Plan: Recommend follow-up frequency and parameters\n"
             "5. Evidence Basis: Cite relevant guidelines supporting recommendations make it advanced like in healthcare mobile app \n\n"
             "Example format (return as a list of strings, not dictionaries):\n"
@@ -192,25 +214,26 @@ def generate_recommendations(state: State) -> dict:
             diet=pd.get('Diet', 'Unknown'),
             smoking_status="Smoker" if pd.get('is_smoking') else "Non-smoker",
             age=pd.get('Age', 'N/A'),
-            ldl=pd.get('ld_value', 'N/A')
-        )
+            ldl=pd.get('ld_value', 'N/A'),
+            medications=", ".join([f"{m.medicationName} ({m.dosage})" for m in medications])
     elif sent_for == 2:
         instruction = (
             "Provide up to three medical action recommendations for an endocrinologist in 'doctor_recommendations'. "
             "Structure as a list of strings (not dictionaries) with:\n"
             "1. Key metabolic risk factors\n"
             "2. Recommended diagnostic tests with targets\n"
-            "3. Medication considerations with cautions\n"
+            "3. Medication considerations with cautions, considering current medications: {medications}\n"
             "4. Monitoring plan\n"
             "5. Evidence basis\n\n"
             "Set 'patient_recommendations', 'diet_plan', 'exercise_plan', 'nutrition_targets' to null."
-        )
+        ).format(medications=", ".join([f"{m.medicationName} ({m.dosage})" for m in medications]))
     else:
         raise HTTPException(status_code=400, detail='Invalid sent_for value')
 
     prompt = (
         f"Based on the following patient profile and risk probabilities, generate recommendations.\n"
         f"Patient Data: {pd}\n"
+        f"Current Medications: {[f'{m.medicationName} ({m.dosage})' for m in medications]}\n"
         f"Diabetes Risk: {probs['Diabetes']}\n"
         f"CVD Risk: {probs['Heart Disease']}\n\n"
         f"{instruction}\n"
@@ -265,7 +288,8 @@ def output_results(state: State) -> dict:
     probs = state['risk_probabilities']['Health Risk Probabilities']
     result = {
         'diabetes_probability': probs['Diabetes'],
-        'cvd_probability': probs['Heart Disease']
+        'cvd_probability': probs['Heart Disease'],
+        'current_medications': [dict(m) for m in state.get('current_medications', [])]
     }
     
     if state['sent_for'] == 0:
@@ -311,6 +335,9 @@ async def get_recommendations(patient_id: str, sent_for: Optional[int] = 0):
     if metrics:
         patient.update(metrics[0])
 
+    # Get patient medications
+    medications = get_patient_medications(patient_id)
+
     patient_data = {
         "Blood_Pressure": patient.get('bloodPressure'),
         "Age": patient.get('anchorAge'),
@@ -332,7 +359,11 @@ async def get_recommendations(patient_id: str, sent_for: Optional[int] = 0):
         "gender": 'M' if patient['gender'].lower().startswith('m') else 'F',
     }
 
-    initial_state = {'patient_data': patient_data, 'sent_for': sent_for} 
+    initial_state = {
+        'patient_data': patient_data,
+        'sent_for': sent_for,
+        'current_medications': medications
+    } 
     result = await graph.ainvoke(initial_state)
     return result
 
