@@ -230,7 +230,6 @@ def generate_recommendations(state: State) -> dict:
             "   - Check for contraindications with current medications\n"
             "   - Include dosage guidelines and monitoring requirements\n"
             "4. Monitoring Plan: Recommend follow-up frequency and parameters\n"
-            "5. Evidence Basis: Cite relevant guidelines supporting recommendations (mention each evidence separately)\n\n"
             "Here's an example of the expected JSON output:\n"
             "{{\n"
             "  \"doctor_recommendations\": [\n"
