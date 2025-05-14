@@ -160,13 +160,22 @@ def generate_recommendations(state: State) -> dict:
     elif sent_for == 1:
         instruction = (
             "Provide a comprehensive, personalized cardiology recommendation in 'doctor_recommendations' based on the patient's data. "
-            "Structure your response to include these sections (each as a separate item in the list):\n"
-            "1. **Key Risk Factors**: List the patient's specific cardiovascular risk factors from their profile\n"
-            "2. **Recommended Diagnostic Tests**: Specify necessary labs/tests with target ranges (e.g., 'LDL cholesterol < 70 mg/dL')\n"
-            "3. **Medication Considerations**: Suggest potential medications with cautions for comorbidities\n"
-            "4. **Lifestyle Interventions**: Highlight critical lifestyle changes\n"
-            "5. **Monitoring Plan**: Recommend follow-up frequency and parameters to track\n"
-            "6. **Evidence Basis**: Cite relevant guidelines (e.g., ACC/AHA) supporting recommendations\n\n"
+            "Structure your response as a list of strings (not dictionaries), with each string representing one recommendation section:\n"
+            "1. Key Risk Factors: List the patient's specific cardiovascular risk factors\n"
+            "2. Recommended Diagnostic Tests: Specify necessary labs/tests with target ranges\n"
+            "3. Medication Considerations: Suggest potential medications with cautions\n"
+            "4. Lifestyle Interventions: Highlight critical lifestyle changes\n"
+            "5. Monitoring Plan: Recommend follow-up frequency and parameters\n"
+            "6. Evidence Basis: Cite relevant guidelines supporting recommendations\n\n"
+            "Example format (return as a list of strings, not dictionaries):\n"
+            "[\n"
+            "  \"Key Risk Factors: Age 58, hypertension (BP 145/92), LDL 132, diabetes risk 32%\",\n"
+            "  \"Diagnostics: Fasting lipid panel (target LDL < 70), hs-CRP, echocardiogram\",\n"
+            "  \"Medication: Consider statin therapy (avoid in liver disease), monitor for myalgias\",\n"
+            "  \"Lifestyle: Mediterranean diet, 150 min/week moderate exercise\",\n"
+            "  \"Monitoring: Follow-up in 3 months for BP and lipid check\",\n"
+            "  \"Evidence: 2019 ACC/AHA Primary Prevention Guidelines recommend...\"\n"
+            "]\n\n"
             "Personalize ALL recommendations based on:\n"
             "- Current vitals: BP {bp}, BMI {bmi}, glucose {glucose}\n"
             "- Risk scores: ASCVD risk {cvd_risk}%, diabetes risk {diabetes_risk}%\n"
@@ -206,7 +215,20 @@ def generate_recommendations(state: State) -> dict:
     try:
         response = llm.invoke(prompt)
         json_str = re.search(r'\{.*\}', response.content, re.DOTALL).group(0)
-        recs = Recommendations(**json.loads(json_str))
+        json_data = json.loads(json_str)
+        
+        # Convert any dictionary items in doctor_recommendations to strings
+        if 'doctor_recommendations' in json_data and json_data['doctor_recommendations']:
+            processed_recs = []
+            for rec in json_data['doctor_recommendations']:
+                if isinstance(rec, dict):
+                    # Convert dict to string representation
+                    processed_recs.append(str(rec))
+                else:
+                    processed_recs.append(rec)
+            json_data['doctor_recommendations'] = processed_recs
+            
+        recs = Recommendations(**json_data)
         
         if sent_for == 0 and (not recs.diet_plan or not recs.exercise_plan):
             raise ValueError("Missing required recommendation fields")
@@ -214,7 +236,7 @@ def generate_recommendations(state: State) -> dict:
         return {'recommendations': recs}
     except Exception as e:
         logger.error(f"Recommendation generation failed: {str(e)}")
-        raise
+        raise HTTPException(status_code=500, detail=f"Recommendation generation failed: {str(e)}")
 
 def evaluate_recommendations(state: State) -> dict:
     if state['sent_for'] != 0:
