@@ -198,7 +198,12 @@ def generate_recommendations(state: State) -> dict:
     elif sent_for == 2:
         instruction = (
             "Provide up to three medical action recommendations for an endocrinologist in 'doctor_recommendations'. "
-            "Notify about comorbid conditions (e.g., CVD risk) and caution against medications that may worsen those conditions.\n"
+            "Structure as a list of strings (not dictionaries) with:\n"
+            "1. Key metabolic risk factors\n"
+            "2. Recommended diagnostic tests with targets\n"
+            "3. Medication considerations with cautions\n"
+            "4. Monitoring plan\n"
+            "5. Evidence basis\n\n"
             "Set 'patient_recommendations', 'diet_plan', 'exercise_plan', 'nutrition_targets' to null."
         )
     else:
@@ -217,13 +222,14 @@ def generate_recommendations(state: State) -> dict:
         json_str = re.search(r'\{.*\}', response.content, re.DOTALL).group(0)
         json_data = json.loads(json_str)
         
-        # Convert any dictionary items in doctor_recommendations to strings
+        # Convert any dictionary items in recommendations to strings
         if 'doctor_recommendations' in json_data and json_data['doctor_recommendations']:
             processed_recs = []
             for rec in json_data['doctor_recommendations']:
                 if isinstance(rec, dict):
                     # Convert dict to string representation
-                    processed_recs.append(str(rec))
+                    key = next(iter(rec))
+                    processed_recs.append(f"{key}: {', '.join(rec[key]) if isinstance(rec[key], list) else rec[key]}")
                 else:
                     processed_recs.append(rec)
             json_data['doctor_recommendations'] = processed_recs
@@ -234,6 +240,9 @@ def generate_recommendations(state: State) -> dict:
             raise ValueError("Missing required recommendation fields")
             
         return {'recommendations': recs}
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse LLM response: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to parse recommendation response")
     except Exception as e:
         logger.error(f"Recommendation generation failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Recommendation generation failed: {str(e)}")
@@ -268,7 +277,7 @@ def output_results(state: State) -> dict:
             'nutrition_targets': state['recommendations'].nutrition_targets
         })
     else:
-        result['doctor_recommendations'] = state['recommendations'].doctor_recommendations[:6]  # Increased to show all sections
+        result['doctor_recommendations'] = state['recommendations'].doctor_recommendations[:6]
     
     return result
 
