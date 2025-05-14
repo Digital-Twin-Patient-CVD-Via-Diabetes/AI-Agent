@@ -345,7 +345,7 @@ async def get_recommendations(patient_id: str, sent_for: Optional[int] = 0):
         "Diet":  patient.get('diet'),
         "Sleep_Hours_Per_Day": patient.get('sleepHoursPerDay'),
         "Stress_Level": patient.get('stressLevel'),
-        "glucose": patient.get('glucose'),
+        "glucose": patient.get('glucose'),    
         "BMI": patient.get('bmi'),
         "hypertension":  1 if patient.get("bloodPressure", 0) > 130 else 0,
         "is_smoking": patient.get('isSmoker'),
