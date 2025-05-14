@@ -218,35 +218,44 @@ def generate_recommendations(state: State) -> dict:
         ).format(medications=", ".join([f"{m.medicationName} ({m.dosage})" for m in medications]))
     elif sent_for == 1:
         instruction = (
-            "Provide a comprehensive, personalized cardiology recommendation in 'doctor_recommendations' based on the patient's data. "
-            "Structure your response as a list of strings (not dictionaries), with each string representing one recommendation section:\n"
-           
-            "1. Key Risk Factors: (no mention for age) List the patient's specific cardiovascular risk factors\n"
-            "2. Recommended Diagnostic Tests: Specify necessary labs/tests with target ranges\n"
-            "3. Medication Considerations: \n"
-            "   - First list the patient's current medications with dosages: {medications_list}\n"
-            "   - Then suggest potential new medications with cautions\n"
-            "   - IMPORTANT: Do NOT recommend medications the patient is already taking\n"
-            "   - Check for contraindications with current medications\n"
-            "   - Include dosage guidelines and monitoring requirements\n"
-            "4. Monitoring Plan: Recommend follow-up frequency and parameters\n"
-            "Here's an example of the expected JSON output:\n"
-            "{{\n"
-            "  \"doctor_recommendations\": [\n"
-            "    \"Key Risk Factors: Hypertension (BP 145/92), LDL 132, diabetes risk 32%, family history of CVD\",\n"
-            "    \"Diagnostics: Fasting lipid panel (target LDL < 70), hs-CRP, echocardiogram\",\n"
-            "    \"Medication Considerations: \\nCurrent Medications:\\n- Atorvastatin 20mg daily\\n- Metformin 500mg BID\\n\\nRecommended Additions:\\n- Consider low-dose aspirin (75mg daily) if no contraindications\\n- Monitor for GI bleeding\\n- Avoid NSAIDs due to potential interaction with aspirin\",\n"
-            "    \"Monitoring: Follow-up in 3 months for BP and lipid check, annual ECG\",\n"
-            "  ]\n"
-            "}}\n\n"
-            "Personalize ALL recommendations based on:\n"
-            "- Current vitals: BP {bp}, BMI {bmi}, glucose {glucose}\n"
-            "- Risk scores: ASCVD risk {cvd_risk}%, diabetes risk {diabetes_risk}%\n"
-            "- Comorbidities: {comorbidities}\n"
-            "- Lifestyle factors: {exercise}, {diet}, {smoking_status}\n"
-            "- Current medications: {medications_count} medications\n"
-            "- Available Cardiology Medications: {available_meds}\n\n"
-            "Set 'patient_recommendations', 'diet_plan', 'exercise_plan', 'nutrition_targets' to null."
+           "Provide a **detailed, evidence-based cardiology consult** (not primary care advice). "
+    "Focus on **actionable, specialist-level interventions**.\n\n"
+    
+    "Structure output as:\n"
+    "1. **Risk Stratification**: Quantify with ESC/ACC risk scores\n"
+    "2. **Diagnostics**: Tiered by urgency (emergent/urgent/elective)\n"
+    "3. **Medications**: Include:\n"
+    "   - First list the patient's current medications with dosages: {medications_list}\n"
+    "   - Then suggest potential new medications with cautions\n"
+    "   - IMPORTANT: Do NOT recommend medications the patient is already taking\n"
+    "   - Check for contraindications with current medications\n"
+    "   - Include dosage guidelines and monitoring requirements\n"
+    "   - Drug titration schedules\n"
+    "   - Alternatives if first-line fails\n"
+    "   - Monitoring parameters (e.g., K+ for ACEi)\n"
+    "4. **Follow-up**: Specific to intervention (e.g., 2-week post-discharge for HF)\n"
+    "5. **Red Flags**: Symptoms requiring immediate action\n\n"
+    
+    "**Avoid**:\n"
+    "- Generic lifestyle advice (assume PCP handles this)\n"
+    "- Repeating current meds without analysis\n\n"
+    
+    "**Example Expert Output**:\n"
+    "{\n"
+    '  "doctor_recommendations": [\n'
+    '    "Risk: 10-year ASCVD risk 12% (Pooled Cohort Equation)",\n'
+    '    "Diagnostics: \n- Emergent: RHC if PCWP >25mmHg\n- Urgent: CTA for RCA lesion",\n'
+    '    "Meds: \n- Start sacubitril/valsartan 24/26mg BID, titrate to 97/103mg BID\n- Avoid diltiazem (interacts with simvastatin)",\n'
+    '    "Follow-up: \n- Cardiology visit in 14 days post-HF admission"\n'
+    "  ]\n"
+    "}\n\n"
+    
+    "**Patient-Specific Data**:\n"
+    "- Vitals: {bp} (Stage 2 HTN), BMI {bmi} (obese class II)\n"
+    "- Scores: ASCVD {cvd_risk}%, Diabetes {diabetes_risk}%\n"
+    "- Comorbidities: {comorbidities}\n"
+    "- Current Meds: {medications_count} drugs ({medications})\n"
+    "- Resources: {available_meds}"
         ).format(
             bp=pd.get('Blood_Pressure', 'N/A'),
             bmi=pd.get('BMI', 'N/A'),
