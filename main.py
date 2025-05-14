@@ -218,44 +218,40 @@ def generate_recommendations(state: State) -> dict:
         ).format(medications=", ".join([f"{m.medicationName} ({m.dosage})" for m in medications]))
     elif sent_for == 1:
         instruction = (
-           "Provide a **detailed, evidence-based cardiology consult** (not primary care advice). "
-    "Focus on **actionable, specialist-level interventions**.\n\n"
-    
-    "Structure output as:\n"
-    "1. **Risk Stratification**: Quantify with ESC/ACC risk scores\n"
-    "2. **Diagnostics**: Tiered by urgency (emergent/urgent/elective)\n"
-    "3. **Medications**: Include:\n"
-    "   - First list the patient's current medications with dosages: {medications_list}\n"
-    "   - Then suggest potential new medications with cautions\n"
-    "   - IMPORTANT: Do NOT recommend medications the patient is already taking\n"
-    "   - Check for contraindications with current medications\n"
-    "   - Include dosage guidelines and monitoring requirements\n"
-    "   - Drug titration schedules\n"
-    "   - Alternatives if first-line fails\n"
-    "   - Monitoring parameters (e.g., K+ for ACEi)\n"
-    "4. **Follow-up**: Specific to intervention (e.g., 2-week post-discharge for HF)\n"
-    "5. **Red Flags**: Symptoms requiring immediate action\n\n"
-    
-    "**Avoid**:\n"
-    "- Generic lifestyle advice (assume PCP handles this)\n"
-    "- Repeating current meds without analysis\n\n"
-    
-    "**Example Expert Output**:\n"
-    "{\n"
-    '  "doctor_recommendations": [\n'
-    '    "Risk: 10-year ASCVD risk 12% (Pooled Cohort Equation)",\n'
-    '    "Diagnostics: \n- Emergent: RHC if PCWP >25mmHg\n- Urgent: CTA for RCA lesion",\n'
-    '    "Meds: \n- Start sacubitril/valsartan 24/26mg BID, titrate to 97/103mg BID\n- Avoid diltiazem (interacts with simvastatin)",\n'
-    '    "Follow-up: \n- Cardiology visit in 14 days post-HF admission"\n'
-    "  ]\n"
-    "}\n\n"
-    
-    "**Patient-Specific Data**:\n"
-    "- Vitals: {bp} (Stage 2 HTN), BMI {bmi} (obese class II)\n"
-    "- Scores: ASCVD {cvd_risk}%, Diabetes {diabetes_risk}%\n"
-    "- Comorbidities: {comorbidities}\n"
-    "- Current Meds: {medications_count} drugs ({medications})\n"
-    "- Resources: {available_meds}"
+            "Provide a **detailed, evidence-based cardiology consult** (not primary care advice). "
+            "Focus on **actionable, specialist-level interventions**.\n\n"
+            "Structure output as:\n"
+            "1. **Risk Stratification**: Quantify with ESC/ACC risk scores\n"
+            "2. **Diagnostics**: Tiered by urgency (emergent/urgent/elective)\n"
+            "3. **Medications**: Include:\n"
+            "   - First list the patient's current medications with dosages: {medications_list}\n"
+            "   - Then suggest potential new medications with cautions\n"
+            "   - IMPORTANT: Do NOT recommend medications the patient is already taking\n"
+            "   - Check for contraindications with current medications\n"
+            "   - Include dosage guidelines and monitoring requirements\n"
+            "   - Drug titration schedules\n"
+            "   - Alternatives if first-line fails\n"
+            "   - Monitoring parameters (e.g., K+ for ACEi)\n"
+            "4. **Follow-up**: Specific to intervention (e.g., 2-week post-discharge for HF)\n"
+            "5. **Red Flags**: Symptoms requiring immediate action\n\n"
+            "**Avoid**:\n"
+            "- Generic lifestyle advice (assume PCP handles this)\n"
+            "- Repeating current meds without analysis\n\n"
+            "**Example Expert Output**:\n"
+            "{\n"
+            '  "doctor_recommendations": [\n'
+            '    "Risk: 10-year ASCVD risk 12% (Pooled Cohort Equation)",\n'
+            '    "Diagnostics: \n- Emergent: RHC if PCWP >25mmHg\n- Urgent: CTA for RCA lesion",\n'
+            '    "Meds: \n- Start sacubitril/valsartan 24/26mg BID, titrate to 97/103mg BID\n- Avoid diltiazem (interacts with simvastatin)",\n'
+            '    "Follow-up: \n- Cardiology visit in 14 days post-HF admission"\n'
+            "  ]\n"
+            "}\n\n"
+            "**Patient-Specific Data**:\n"
+            "- Vitals: {bp} (Stage 2 HTN), BMI {bmi} (obese class II)\n"
+            "- Scores: ASCVD {cvd_risk}%, Diabetes {diabetes_risk}%\n"
+            "- Comorbidities: {comorbidities}\n"
+            "- Current Meds: {medications_count} drugs ({medications})\n"
+            "- Resources: {available_meds}"
         ).format(
             bp=pd.get('Blood_Pressure', 'N/A'),
             bmi=pd.get('BMI', 'N/A'),
@@ -286,10 +282,10 @@ def generate_recommendations(state: State) -> dict:
             "Here's an example of the expected JSON output:\n"
             "{{\n"
             "  \"doctor_recommendations\": [\n"
-            "    \"Key metabolic risk factors: Elevated glucose {glucose}, HbA1c {hba1c}, BMI {bmi}\",\n"
+            "    \"Key metabolic risk factors: Elevated glucose {glucose}, BMI {bmi}\",\n"
             "    \"Diagnostics: Fasting glucose (target < 100), HbA1c (target < 5.7%)\",\n"
             "    \"Medication Considerations: \\nCurrent Medications:\\n- Metformin 500mg BID\\n\\nRecommended Adjustments:\\n- Consider increasing Metformin to 1000mg BID if tolerated\\n- Add GLP-1 agonist if no contraindications\",\n"
-            "    \"Monitoring: Follow-up in 1 month for glucose check, repeat HbA1c in 3 months\",\n"
+            "    \"Monitoring: Follow-up in 1 month for glucose check, repeat HbA1c in 3 months\"\n"
             "  ]\n"
             "}}\n\n"
             "Set 'patient_recommendations', 'diet_plan', 'exercise_plan', 'nutrition_targets' to null."
@@ -297,21 +293,28 @@ def generate_recommendations(state: State) -> dict:
             medications_list="\n- ".join([f"{m.medicationName} {m.dosage}" + (f" ({m.frequency})" if m.frequency else "") for m in medications]),
             medications=", ".join([f"{m.medicationName}" for m in medications]),
             glucose=pd.get('glucose', 'N/A'),
-            hba1c=pd.get('hemoglobin_a1c', 'N/A'),
             bmi=pd.get('BMI', 'N/A'),
             available_meds="\n".join(meds_info) if meds_info else "No specific endocrinology medications in database")
     else:
         raise HTTPException(status_code=400, detail='Invalid sent_for value')
 
-    prompt = (
-        f"Based on the following patient profile and risk probabilities, generate recommendations.\n"
-        f"Patient Data: {pd}\n"
-        f"Current Medications: {[f'{m.medicationName} {m.dosage}' + (f' ({m.frequency})' if m.frequency else '') for m in medications]}\n"
-        f"Diabetes Risk: {probs['Diabetes']}\n"
-        f"CVD Risk: {probs['Heart Disease']}\n\n"
-        f"{instruction}\n"
-        f"Return only the JSON object, without any additional text or explanations."
-    )
+    try:
+        prompt = (
+            f"Based on the following patient profile and risk probabilities, generate recommendations.\n"
+            f"Patient Data: {pd}\n"
+            f"Current Medications: {[f'{m.medicationName} {m.dosage}' + (f' ({m.frequency})' if m.frequency else '') for m in medications]}\n"
+            f"Diabetes Risk: {probs['Diabetes']}\n"
+            f"CVD Risk: {probs['Heart Disease']}\n\n"
+            f"{instruction}\n"
+            f"Return only the JSON object, without any additional text or explanations."
+        )
+    except KeyError as e:
+        logger.error(f"Missing required patient data field: {str(e)}")
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Missing required patient data field: {str(e)}"
+        )
+
     try:
         response = llm.invoke(prompt)
         json_str = re.search(r'\{.*\}', response.content, re.DOTALL).group(0)
