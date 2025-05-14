@@ -242,7 +242,7 @@ def generate_recommendations(state: State) -> dict:
             "    \"Diagnostics: Fasting lipid panel (target LDL < 70), hs-CRP, echocardiogram\",\n"
             "    \"Medication Considerations: \\nCurrent Medications:\\n- Atorvastatin 20mg daily\\n- Metformin 500mg BID\\n\\nRecommended Additions:\\n- Consider low-dose aspirin (75mg daily) if no contraindications\\n- Monitor for GI bleeding\\n- Avoid NSAIDs due to potential interaction with aspirin\",\n"
             "    \" Red Flags: Symptoms requiring immediate action\",\n"
-            "    \"Avoid: Repeating current meds without analysis,personalized lifestyle advice",\n"
+            "    \"Avoid: Repeating current meds without analysis,personalized lifestyle advice\",\n"
             "  ]\n"
             "}}\n\n"
             "Personalize ALL recommendations based on:\n"
