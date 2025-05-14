@@ -148,7 +148,7 @@ def generate_recommendations(state: State) -> dict:
             "You MUST provide nutrition targets in 'nutrition_targets', which must be a dictionary with target values for relevant metrics, e.g., 'target_BMI', 'target_glucose', etc.\n"
             "Set 'doctor_recommendations' to null.\n"
             "**Critical Instruction:** Do NOT omit 'diet_plan', 'exercise_plan', or 'nutrition_targets'. These fields are required and must be populated with appropriate values based on the patient data.\n"
-            "Here’s an example of the expected JSON output:\n"
+            "Here's an example of the expected JSON output:\n"
             "{\n"
             "  \"patient_recommendations\": [\"Increase water intake\", \"Reduce sugar consumption\"],\n"
             "  \"diet_plan\": {\"description\": \"A balanced diet with Egyptian staples like ful medames and koshari\", \"calories\": 2000, \"meals\": [\"Ful medames with bread\", \"Grilled chicken with rice\"]},\n"
@@ -159,10 +159,33 @@ def generate_recommendations(state: State) -> dict:
         )
     elif sent_for == 1:
         instruction = (
-       "Provide up to three medical action recommendations for a cardiologist in 'doctor_recommendations'. "
-            "Notify about comorbid conditions (e.g., prediabetes) and caution against medications that may worsen those conditions.\n"
+            "Provide a comprehensive, personalized cardiology recommendation in 'doctor_recommendations' based on the patient's data. "
+            "Structure your response to include these sections (each as a separate item in the list):\n"
+            "1. **Key Risk Factors**: List the patient's specific cardiovascular risk factors from their profile\n"
+            "2. **Recommended Diagnostic Tests**: Specify necessary labs/tests with target ranges (e.g., 'LDL cholesterol < 70 mg/dL')\n"
+            "3. **Medication Considerations**: Suggest potential medications with cautions for comorbidities\n"
+            "4. **Lifestyle Interventions**: Highlight critical lifestyle changes\n"
+            "5. **Monitoring Plan**: Recommend follow-up frequency and parameters to track\n"
+            "6. **Evidence Basis**: Cite relevant guidelines (e.g., ACC/AHA) supporting recommendations\n\n"
+            "Personalize ALL recommendations based on:\n"
+            "- Current vitals: BP {bp}, BMI {bmi}, glucose {glucose}\n"
+            "- Risk scores: ASCVD risk {cvd_risk}%, diabetes risk {diabetes_risk}%\n"
+            "- Comorbidities: {comorbidities}\n"
+            "- Lifestyle factors: {exercise}, {diet}, {smoking_status}\n\n"
             "Set 'patient_recommendations', 'diet_plan', 'exercise_plan', 'nutrition_targets' to null."
-    )
+        ).format(
+            bp=pd.get('Blood_Pressure', 'N/A'),
+            bmi=pd.get('BMI', 'N/A'),
+            glucose=pd.get('glucose', 'N/A'),
+            cvd_risk=probs['Heart Disease'],
+            diabetes_risk=probs['Diabetes'],
+            comorbidities="Prediabetes" if float(probs['Diabetes'].strip('%')) > 25 else "None noted",
+            exercise=f"{pd.get('Exercise_Hours_Per_Week', 0)} hrs/week",
+            diet=pd.get('Diet', 'Unknown'),
+            smoking_status="Smoker" if pd.get('is_smoking') else "Non-smoker",
+            age=pd.get('Age', 'N/A'),
+            ldl=pd.get('ld_value', 'N/A')
+        )
     elif sent_for == 2:
         instruction = (
             "Provide up to three medical action recommendations for an endocrinologist in 'doctor_recommendations'. "
@@ -180,7 +203,6 @@ def generate_recommendations(state: State) -> dict:
         f"{instruction}\n"
         f"Return only the JSON object, without any additional text or explanations."
     )
-    response = llm.invoke(prompt)
     try:
         response = llm.invoke(prompt)
         json_str = re.search(r'\{.*\}', response.content, re.DOTALL).group(0)
@@ -224,7 +246,7 @@ def output_results(state: State) -> dict:
             'nutrition_targets': state['recommendations'].nutrition_targets
         })
     else:
-        result['doctor_recommendations'] = state['recommendations'].doctor_recommendations[:3]
+        result['doctor_recommendations'] = state['recommendations'].doctor_recommendations[:6]  # Increased to show all sections
     
     return result
 
