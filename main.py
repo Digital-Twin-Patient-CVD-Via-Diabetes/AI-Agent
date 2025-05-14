@@ -215,7 +215,7 @@ def generate_recommendations(state: State) -> dict:
             smoking_status="Smoker" if pd.get('is_smoking') else "Non-smoker",
             age=pd.get('Age', 'N/A'),
             ldl=pd.get('ld_value', 'N/A'),
-            medications=", ".join([f"{m.medicationName} ({m.dosage})" for m in medications])
+            medications=", ".join([f"{m.medicationName} ({m.dosage})" for m in medications]))
     elif sent_for == 2:
         instruction = (
             "Provide up to three medical action recommendations for an endocrinologist in 'doctor_recommendations'. "
