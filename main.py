@@ -44,7 +44,7 @@ try:
     db = tmp_client.get_default_database()
     patients_col = db["patients"]
     metrics_col = db["healthmetrics"]
-    medications_col = db["medications"]  # New collection for medications
+    medications_col = db["medications"]
     logger.info("MongoDB connection established")
 except Exception as e:
     logger.error(f"Failed to connect to MongoDB: {str(e)}")
@@ -345,7 +345,7 @@ async def get_recommendations(patient_id: str, sent_for: Optional[int] = 0):
         "Diet":  patient.get('diet'),
         "Sleep_Hours_Per_Day": patient.get('sleepHoursPerDay'),
         "Stress_Level": patient.get('stressLevel'),
-        "glucose": patient.get('glucose'),    
+        "glucose": patient.get('glucose'),
         "BMI": patient.get('bmi'),
         "hypertension":  1 if patient.get("bloodPressure", 0) > 130 else 0,
         "is_smoking": patient.get('isSmoker'),
