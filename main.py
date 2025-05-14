@@ -45,7 +45,7 @@ try:
     patients_col = db["patients"]
     metrics_col = db["healthmetrics"]
     medications_col = db["medications"]
-    medicines_col = db["medicines"]  # Medicine database collection
+    medicines_col = db["medicines"]
     logger.info("MongoDB connection established")
 except Exception as e:
     logger.error(f"Failed to connect to MongoDB: {str(e)}")
@@ -187,13 +187,10 @@ def generate_recommendations(state: State) -> dict:
     # Filter medicines by specialization based on sent_for
     if sent_for == 1:  # Cardiology
         relevant_meds = [m for m in available_meds if 'cardiology' in m.specialization.lower()]
-        specialty = "cardiology"
     elif sent_for == 2:  # Endocrinology
         relevant_meds = [m for m in available_meds if 'endocrinology' in m.specialization.lower()]
-        specialty = "endocrinology"
     else:
         relevant_meds = []
-        specialty = "general"
 
     meds_info = []
     for med in relevant_meds:
@@ -219,49 +216,40 @@ def generate_recommendations(state: State) -> dict:
             "  \"doctor_recommendations\": null\n"
             "}}"
         ).format(medications=", ".join([f"{m.medicationName} ({m.dosage})" for m in medications]))
-    elif sent_for in [1, 2]:
+    elif sent_for == 1:
         instruction = (
-            "Provide a comprehensive, personalized {specialty} recommendation in 'doctor_recommendations' based on the patient's data. "
+            "Provide a comprehensive, personalized cardiology recommendation in 'doctor_recommendations' based on the patient's data. "
             "Structure your response as a list of strings (not dictionaries), with each string representing one recommendation section:\n"
            
-            "1. Key Risk Factors: (no mention for age) List the patient's specific risk factors\n"
+            "1. Key Risk Factors: (no mention for age) List the patient's specific cardiovascular risk factors\n"
             "2. Recommended Diagnostic Tests: Specify necessary labs/tests with target ranges\n"
-            "3. Medication Analysis:\n"
-            "   - Current Medications: List all current medications with dosages\n"
-            "   - Medication Conflicts: Identify ANY potential conflicts between current medications and recommended ones\n"
-            "   - Priority Guidance: If conflicts exist, specify which medication has priority and when to start others\n"
-            "   - Recommended New Medications: Suggest new medications from our database (see below)\n"
-            "   - Dosage Instructions: Provide detailed dosage for new medications (start dose, maintenance, adjustments)\n"
-            "   - Washout Periods: If stopping any medication, specify required washout period before starting new ones\n"
+            "3. Medication Considerations: \n"
+            "   - First list the patient's current medications with dosages: {medications_list}\n"
+            "   - Then suggest potential new medications with cautions\n"
+            "   - IMPORTANT: Do NOT recommend medications the patient is already taking\n"
+            "   - Check for contraindications with current medications\n"
+            "   - Include dosage guidelines and monitoring requirements\n"
             "4. Monitoring Plan: Recommend follow-up frequency and parameters\n"
-            "5. Evidence Basis: Cite relevant guidelines supporting recommendations\n\n"
-            "Available {specialty} Medications in Our Database:\n{available_meds}\n\n"
-            "Current Patient Medications:\n{medications_list}\n\n"
-            "**Critical Rules:**\n"
-            "- NEVER recommend medications the patient is already taking\n"
-            "- ALWAYS check for potential conflicts with current medications\n"
-            "- If conflicts exist, provide clear guidance on priority and timing\n"
-            "- ALWAYS specify dosages for new medications\n"
-            "- Include washout periods when changing medications\n\n"
-            "Example format (return as a list of strings, not dictionaries):\n"
-            "[\n"
-            "  \"Key Risk Factors: Hypertension (BP 145/92), LDL 132, diabetes risk 32%\",\n"
-            "  \"Diagnostics: Fasting lipid panel (target LDL < 70), hs-CRP, echocardiogram\",\n"
-            "  \"Medication Analysis:\\nCurrent Medications:\\n- Atorvastatin 20mg daily\\n- Metformin 500mg BID\\n\\nConflicts:\\n- Atorvastatin may interact with new medication X\\n\\nPriority Guidance:\\n- Atorvastatin should be continued as priority\\n- New medication Y can be started after 7-day washout period\\n\\nRecommended Additions:\\n- Medication Z: Start with 5mg daily, increase to 10mg after 2 weeks\\n- Monitor liver function tests monthly\",\n"
-            "  \"Monitoring: Follow-up in 3 months for BP and lipid check, annual ECG\",\n"
-            "  \"Evidence: 2019 ACC/AHA Primary Prevention Guidelines recommend...\"\n"
-            "]\n\n"
+            "5. Evidence Basis: Cite relevant guidelines supporting recommendations (mention each evidence separately)\n\n"
+            "Here's an example of the expected JSON output:\n"
+            "{{\n"
+            "  \"doctor_recommendations\": [\n"
+            "    \"Key Risk Factors: Hypertension (BP 145/92), LDL 132, diabetes risk 32%, family history of CVD\",\n"
+            "    \"Diagnostics: Fasting lipid panel (target LDL < 70), hs-CRP, echocardiogram\",\n"
+            "    \"Medication Considerations: \\nCurrent Medications:\\n- Atorvastatin 20mg daily\\n- Metformin 500mg BID\\n\\nRecommended Additions:\\n- Consider low-dose aspirin (75mg daily) if no contraindications\\n- Monitor for GI bleeding\\n- Avoid NSAIDs due to potential interaction with aspirin\",\n"
+            "    \"Monitoring: Follow-up in 3 months for BP and lipid check, annual ECG\",\n"
+            "    \"Evidence: 2019 ACC/AHA Primary Prevention Guidelines recommend...\"\n"
+            "  ]\n"
+            "}}\n\n"
             "Personalize ALL recommendations based on:\n"
             "- Current vitals: BP {bp}, BMI {bmi}, glucose {glucose}\n"
-            "- Risk scores: {cvd_risk}%, diabetes risk {diabetes_risk}%\n"
+            "- Risk scores: ASCVD risk {cvd_risk}%, diabetes risk {diabetes_risk}%\n"
             "- Comorbidities: {comorbidities}\n"
             "- Lifestyle factors: {exercise}, {diet}, {smoking_status}\n"
-            "- Current medications: {medications_count} medications\n\n"
+            "- Current medications: {medications_count} medications\n"
+            "- Available Cardiology Medications: {available_meds}\n\n"
             "Set 'patient_recommendations', 'diet_plan', 'exercise_plan', 'nutrition_targets' to null."
         ).format(
-            specialty=specialty,
-            available_meds="\n".join(meds_info) if meds_info else "No specific medications in database",
-            medications_list="\n- ".join([f"{m.medicationName} {m.dosage}" + (f" ({m.frequency})" if m.frequency else "") for m in medications]),
             bp=pd.get('Blood_Pressure', 'N/A'),
             bmi=pd.get('BMI', 'N/A'),
             glucose=pd.get('glucose', 'N/A'),
@@ -271,7 +259,41 @@ def generate_recommendations(state: State) -> dict:
             exercise=f"{pd.get('Exercise_Hours_Per_Week', 0)} hrs/week",
             diet=pd.get('Diet', 'Unknown'),
             smoking_status="Smoker" if pd.get('is_smoking') else "Non-smoker",
-            medications_count=len(medications))
+            medications_list="\n- ".join([f"{m.medicationName} {m.dosage}" + (f" ({m.frequency})" if m.frequency else "") for m in medications]),
+            medications_count=len(medications),
+            medications=", ".join([f"{m.medicationName}" for m in medications]),
+            available_meds="\n".join(meds_info) if meds_info else "No specific cardiology medications in database")
+    elif sent_for == 2:
+        instruction = (
+            "Provide up to three medical action recommendations for an endocrinologist in 'doctor_recommendations'. "
+            "Structure as a list of strings (not dictionaries) with:\n"
+            "1. Key metabolic risk factors\n"
+            "2. Recommended diagnostic tests with targets\n"
+            "3. Medication considerations: \n"
+            "   - First list current diabetes/endocrine medications: {medications_list}\n"
+            "   - Then suggest potential medication adjustments or additions\n"
+            "   - Do NOT recommend medications already being taken\n"
+            "   - Check for contraindications with current regimen\n"
+            "4. Monitoring plan\n"
+            "5. Evidence basis\n\n"
+            "Here's an example of the expected JSON output:\n"
+            "{{\n"
+            "  \"doctor_recommendations\": [\n"
+            "    \"Key metabolic risk factors: Elevated glucose {glucose}, HbA1c {hba1c}, BMI {bmi}\",\n"
+            "    \"Diagnostics: Fasting glucose (target < 100), HbA1c (target < 5.7%)\",\n"
+            "    \"Medication Considerations: \\nCurrent Medications:\\n- Metformin 500mg BID\\n\\nRecommended Adjustments:\\n- Consider increasing Metformin to 1000mg BID if tolerated\\n- Add GLP-1 agonist if no contraindications\",\n"
+            "    \"Monitoring: Follow-up in 1 month for glucose check, repeat HbA1c in 3 months\",\n"
+            "    \"Evidence: ADA 2023 Guidelines recommend...\"\n"
+            "  ]\n"
+            "}}\n\n"
+            "Set 'patient_recommendations', 'diet_plan', 'exercise_plan', 'nutrition_targets' to null."
+        ).format(
+            medications_list="\n- ".join([f"{m.medicationName} {m.dosage}" + (f" ({m.frequency})" if m.frequency else "") for m in medications]),
+            medications=", ".join([f"{m.medicationName}" for m in medications]),
+            glucose=pd.get('glucose', 'N/A'),
+            hba1c=pd.get('hemoglobin_a1c', 'N/A'),
+            bmi=pd.get('BMI', 'N/A'),
+            available_meds="\n".join(meds_info) if meds_info else "No specific endocrinology medications in database")
     else:
         raise HTTPException(status_code=400, detail='Invalid sent_for value')
 
