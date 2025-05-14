@@ -161,7 +161,7 @@ def generate_recommendations(state: State) -> dict:
         instruction = (
             "Provide a comprehensive, personalized cardiology recommendation in 'doctor_recommendations' based on the patient's data. "
             "Structure your response as a list of strings (not dictionaries), with each string representing one recommendation section:\n"
-            "1.SUMMARY FOR CARDIOLOGY SPECIALIST[Actions to take for each patient ]
+            "1. SUMMARY FOR CARDIOLOGY SPECIALIST[Actions to take for patient ]\n"
             "2. Key Risk Factors: (no mention for age ok )List the patient's specific cardiovascular risk factors\n"
             "3. Recommended Diagnostic Tests: Specify necessary labs/tests with target ranges\n"
             "4. Medication Considerations: Suggest potential medications with cautions\n"
