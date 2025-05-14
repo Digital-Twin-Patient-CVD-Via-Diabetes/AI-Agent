@@ -184,24 +184,30 @@ def generate_recommendations(state: State) -> dict:
             "Provide a comprehensive, personalized cardiology recommendation in 'doctor_recommendations' based on the patient's data. "
             "Structure your response as a list of strings (not dictionaries), with each string representing one recommendation section:\n"
            
-            "1. Key Risk Factors: (no mention for age ok )List the patient's specific cardiovascular risk factors\n"
+            "1. Key Risk Factors: (no mention for age) List the patient's specific cardiovascular risk factors\n"
             "2. Recommended Diagnostic Tests: Specify necessary labs/tests with target ranges\n"
-            "3. Medication Considerations: Suggest potential medications with cautions, considering current medications: {medications}\n"
+            "3. Medication Considerations: \n"
+            "   - First list the patient's current medications with dosages: {medications_list}\n"
+            "   - Then suggest potential new medications with cautions\n"
+            "   - IMPORTANT: Do NOT recommend medications the patient is already taking\n"
+            "   - Check for contraindications with current medications\n"
+            "   - Include dosage guidelines and monitoring requirements\n"
             "4. Monitoring Plan: Recommend follow-up frequency and parameters\n"
-            "5. Evidence Basis: Cite relevant guidelines supporting recommendations make it advanced like in healthcare mobile app \n\n"
+            "5. Evidence Basis: Cite relevant guidelines supporting recommendations (mention each evidence separately)\n\n"
             "Example format (return as a list of strings, not dictionaries):\n"
             "[\n"
-            "  \"Key Risk Factors: Age 58, hypertension (BP 145/92), LDL 132, diabetes risk 32%\",\n"
+            "  \"Key Risk Factors: Hypertension (BP 145/92), LDL 132, diabetes risk 32%, family history of CVD\",\n"
             "  \"Diagnostics: Fasting lipid panel (target LDL < 70), hs-CRP, echocardiogram\",\n"
-            "  \"Medication: Consider statin therapy (avoid in liver disease), monitor for myalgias\",\n"
-            "  \"Monitoring: Follow-up in 3 months for BP and lipid check\",\n"
-            "  \"Evidence: 2019 ACC/AHA Primary Prevention Guidelines recommend... mention each evidance separated \"\n"
+            "  \"Medication Considerations: \\nCurrent Medications:\\n- Atorvastatin 20mg daily\\n- Metformin 500mg BID\\n\\nRecommended Additions:\\n- Consider low-dose aspirin (75mg daily) if no contraindications\\n- Monitor for GI bleeding\\n- Avoid NSAIDs due to potential interaction with aspirin\",\n"
+            "  \"Monitoring: Follow-up in 3 months for BP and lipid check, annual ECG\",\n"
+            "  \"Evidence: 2019 ACC/AHA Primary Prevention Guidelines recommend...\"\n"
             "]\n\n"
             "Personalize ALL recommendations based on:\n"
             "- Current vitals: BP {bp}, BMI {bmi}, glucose {glucose}\n"
             "- Risk scores: ASCVD risk {cvd_risk}%, diabetes risk {diabetes_risk}%\n"
             "- Comorbidities: {comorbidities}\n"
-            "- Lifestyle factors: {exercise}, {diet}, {smoking_status}\n\n"
+            "- Lifestyle factors: {exercise}, {diet}, {smoking_status}\n"
+            "- Current medications: {medications_count} medications\n\n"
             "Set 'patient_recommendations', 'diet_plan', 'exercise_plan', 'nutrition_targets' to null."
         ).format(
             bp=pd.get('Blood_Pressure', 'N/A'),
@@ -213,27 +219,33 @@ def generate_recommendations(state: State) -> dict:
             exercise=f"{pd.get('Exercise_Hours_Per_Week', 0)} hrs/week",
             diet=pd.get('Diet', 'Unknown'),
             smoking_status="Smoker" if pd.get('is_smoking') else "Non-smoker",
-            age=pd.get('Age', 'N/A'),
-            ldl=pd.get('ld_value', 'N/A'),
-            medications=", ".join([f"{m.medicationName} ({m.dosage})" for m in medications]))
+            medications_list="\n- ".join([f"{m.medicationName} {m.dosage}" + (f" ({m.frequency})" if m.frequency else "") for m in medications]),
+            medications_count=len(medications),
+            medications=", ".join([f"{m.medicationName}" for m in medications]))
     elif sent_for == 2:
         instruction = (
             "Provide up to three medical action recommendations for an endocrinologist in 'doctor_recommendations'. "
             "Structure as a list of strings (not dictionaries) with:\n"
             "1. Key metabolic risk factors\n"
             "2. Recommended diagnostic tests with targets\n"
-            "3. Medication considerations with cautions, considering current medications: {medications}\n"
+            "3. Medication considerations: \n"
+            "   - First list current diabetes/endocrine medications: {medications_list}\n"
+            "   - Then suggest potential medication adjustments or additions\n"
+            "   - Do NOT recommend medications already being taken\n"
+            "   - Check for contraindications with current regimen\n"
             "4. Monitoring plan\n"
             "5. Evidence basis\n\n"
             "Set 'patient_recommendations', 'diet_plan', 'exercise_plan', 'nutrition_targets' to null."
-        ).format(medications=", ".join([f"{m.medicationName} ({m.dosage})" for m in medications]))
+        ).format(
+            medications_list="\n- ".join([f"{m.medicationName} {m.dosage}" + (f" ({m.frequency})" if m.frequency else "") for m in medications]),
+            medications=", ".join([f"{m.medicationName}" for m in medications]))
     else:
         raise HTTPException(status_code=400, detail='Invalid sent_for value')
 
     prompt = (
         f"Based on the following patient profile and risk probabilities, generate recommendations.\n"
         f"Patient Data: {pd}\n"
-        f"Current Medications: {[f'{m.medicationName} ({m.dosage})' for m in medications]}\n"
+        f"Current Medications: {[f'{m.medicationName} {m.dosage}' + (f' ({m.frequency})' if m.frequency else '') for m in medications]}\n"
         f"Diabetes Risk: {probs['Diabetes']}\n"
         f"CVD Risk: {probs['Heart Disease']}\n\n"
         f"{instruction}\n"
@@ -289,7 +301,11 @@ def output_results(state: State) -> dict:
     result = {
         'diabetes_probability': probs['Diabetes'],
         'cvd_probability': probs['Heart Disease'],
-        'current_medications': [dict(m) for m in state.get('current_medications', [])]
+        'current_medications': [{
+            'medicationName': m.medicationName,
+            'dosage': m.dosage,
+            'frequency': m.frequency
+        } for m in state.get('current_medications', [])]
     }
     
     if state['sent_for'] == 0:
