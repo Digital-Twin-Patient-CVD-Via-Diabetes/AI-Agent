@@ -161,12 +161,12 @@ def generate_recommendations(state: State) -> dict:
         instruction = (
             "Provide a comprehensive, personalized cardiology recommendation in 'doctor_recommendations' based on the patient's data. "
             "Structure your response as a list of strings (not dictionaries), with each string representing one recommendation section:\n"
-            "1. SUMMARY FOR CARDIOLOGY SPECIALIST[Actions to take for patient ]\n"
-            "2. Key Risk Factors: (no mention for age ok )List the patient's specific cardiovascular risk factors\n"
-            "3. Recommended Diagnostic Tests: Specify necessary labs/tests with target ranges\n"
-            "4. Medication Considerations: Suggest potential medications with cautions\n"
-            "5. Monitoring Plan: Recommend follow-up frequency and parameters\n"
-            "6. Evidence Basis: Cite relevant guidelines supporting recommendations make it advanced like in healthcare mobile app \n\n"
+           
+            "1. Key Risk Factors: (no mention for age ok )List the patient's specific cardiovascular risk factors\n"
+            "2. Recommended Diagnostic Tests: Specify necessary labs/tests with target ranges\n"
+            "3. Medication Considerations: Suggest potential medications with cautions\n"
+            "4. Monitoring Plan: Recommend follow-up frequency and parameters\n"
+            "5. Evidence Basis: Cite relevant guidelines supporting recommendations make it advanced like in healthcare mobile app \n\n"
             "Example format (return as a list of strings, not dictionaries):\n"
             "[\n"
             "  \"Key Risk Factors: Age 58, hypertension (BP 145/92), LDL 132, diabetes risk 32%\",\n"
