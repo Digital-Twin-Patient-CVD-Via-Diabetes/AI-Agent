@@ -260,18 +260,24 @@ async def get_recommendations(patient_id: str, sent_for: Optional[int] = 0):
         patient.update(metrics[0])
 
     patient_data = {
-        "Age": (date.today() - patient['birthDate'].date()).days // 365,
         "Blood_Pressure": patient.get('bloodPressure'),
-        "BMI": patient.get('bmi'),
-        "glucose": patient.get('glucose'),
+        "Age": patient.get('anchorAge'),
         "Exercise_Hours_Per_Week": patient.get('exerciseHoursPerWeek'),
-        "Diet": patient.get('diet'),
+        "Diet":  patient.get('diet'),
         "Sleep_Hours_Per_Day": patient.get('sleepHoursPerDay'),
         "Stress_Level": patient.get('stressLevel'),
+        "glucose": patient.get('glucose'),
+        "BMI": patient.get('bmi'),
+        "hypertension":  1 if patient.get("bloodPressure", 0) > 130 else 0,
         "is_smoking": patient.get('isSmoker'),
+        "hemoglobin_a1c": patient.get('hemoglobinA1c'),
+        "Diabetes_pedigree": patient.get('diabetesPedigree'),
+        "CVD_Family_History": patient.get('ckdFamilyHistory'),
+        "ld_value": patient.get('cholesterolLDL'),
+        "admission_tsh": patient.get('admissionSOH'),
         "is_alcohol_user": patient.get('isAlcoholUser'),
-        "diabetesPedigree": patient.get('diabetesPedigree'),
-        "gender": 'M' if patient['gender'].lower().startswith('m') else 'F'
+        "creatine_kinase_ck": patient.get('creatineKinaseCK'),
+        "gender": 'M' if patient['gender'].lower().startswith('m') else 'F',
     }
 
     initial_state = {'patient_data': patient_data, 'sent_for': sent_for} 
